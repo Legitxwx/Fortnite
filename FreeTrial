@@ -1,0 +1,340 @@
+-- Load Orion UI Library
+local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
+
+local Window = OrionLib:MakeWindow({
+	Name = "Fornite Hub", 
+	HidePremium = false, 
+	SaveConfig = true, 
+	IntroText = "Welcome To Fortnite!",
+	ConfigFolder = "FrenzyConfig"
+})
+
+local Main = Window:MakeTab({ Name = "Main", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local ESP = Window:MakeTab({ Name = "ESP", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+
+-- Big Hitbox Script
+Main:AddButton({
+	Name = "Big Hitbox",
+	Callback = function()
+		_G.HeadSize = 50
+		_G.Disabled = true
+
+		game:GetService('RunService').RenderStepped:Connect(function()
+			if _G.Disabled then
+				for _, v in ipairs(game:GetService('Players'):GetPlayers()) do
+					if v ~= game:GetService('Players').LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+						pcall(function()
+							v.Character.HumanoidRootPart.Size = Vector3.new(_G.HeadSize, _G.HeadSize, _G.HeadSize)
+							v.Character.HumanoidRootPart.Transparency = 0.7
+							v.Character.HumanoidRootPart.BrickColor = BrickColor.new("Really blue")
+							v.Character.HumanoidRootPart.Material = Enum.Material.Neon
+							v.Character.HumanoidRootPart.CanCollide = false
+						end)
+					end
+				end
+			end
+		end)
+	end
+})
+
+-- Fly GUI Script
+Main:AddButton({
+	Name = "Fly Gui",
+	Callback = function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+	end    
+})
+
+-- Speed Textbox
+Main:AddTextbox({
+	Name = "Speed",
+	Default = "16",
+	TextDisappear = true,
+	Callback = function(Value)
+		local speed = tonumber(Value)
+		local player = game.Players.LocalPlayer
+		if player and player.Character and player.Character:FindFirstChild("Humanoid") and speed then
+			player.Character.Humanoid.WalkSpeed = speed
+		end
+	end
+})
+
+-- Jump Height Textbox
+Main:AddTextbox({
+	Name = "Jump Height",
+	Default = "50",
+	TextDisappear = true,
+	Callback = function(Value)
+		local jumpHeight = tonumber(Value)
+		local player = game.Players.LocalPlayer
+		if player and player.Character and player.Character:FindFirstChild("Humanoid") and jumpHeight then
+			player.Character.Humanoid.JumpPower = jumpHeight
+		end
+	end
+})
+
+-- Teleport To Random Player
+Main:AddButton({
+	Name = "Teleport To Random Player",
+	Callback = function()
+		local players = game:GetService("Players"):GetPlayers()
+		local localPlayer = game.Players.LocalPlayer
+		local others = {}
+
+		for _, p in ipairs(players) do
+			if p ~= localPlayer then table.insert(others, p) end
+		end
+
+		if #others > 0 then
+			local randomPlayer = others[math.random(1, #others)]
+			if randomPlayer.Character and randomPlayer.Character:FindFirstChild("HumanoidRootPart") then
+				localPlayer.Character:SetPrimaryPartCFrame(randomPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 2))
+			end
+		end
+	end
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local ESPEnabled = false
+local TracerEnabled = false
+local RadarEnabled = false
+
+local espConnections = {}
+local espDrawings = {}
+
+local tracerLines = {}
+local tracerConnection = nil
+local tracerGui = nil
+
+local radarDrawings = {}
+local radarConnection = nil
+local radarGuiConnection = nil
+
+-- === TOGGLE: ESP BOXES ===
+ESP:AddToggle({
+	Name = "ESP",
+	Default = false,
+	Callback = function(enabled)
+		ESPEnabled = enabled
+
+		-- Cleanup
+		for _, d in pairs(espDrawings) do for _, v in pairs(d) do v:Remove() end end
+		for _, c in pairs(espConnections) do c:Disconnect() end
+		espDrawings = {}
+		espConnections = {}
+
+		if not enabled then return end
+
+		-- Function to draw ESP box
+		local function CreateESP(player)
+			if player == LocalPlayer then return end
+			local lines = {}
+			for i = 1, 8 do
+				local l = Drawing.new("Line")
+				l.Color = Color3.fromRGB(255, 0, 0)
+				l.Thickness = 2
+				l.Transparency = 1
+				l.Visible = false
+				lines[i] = l
+			end
+			espDrawings[player] = lines
+
+			local con = RunService.RenderStepped:Connect(function()
+				if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+					for _, l in pairs(lines) do l.Visible = false end
+					return
+				end
+
+				local root = player.Character.HumanoidRootPart
+				local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+				if not onScreen then for _, l in pairs(lines) do l.Visible = false end return end
+
+				local size = Vector3.new(2, 3, 0)
+				local corners = {
+					Camera:WorldToViewportPoint(root.CFrame:PointToWorldSpace(Vector3.new(-size.X, size.Y, 0))),
+					Camera:WorldToViewportPoint(root.CFrame:PointToWorldSpace(Vector3.new(size.X, size.Y, 0))),
+					Camera:WorldToViewportPoint(root.CFrame:PointToWorldSpace(Vector3.new(size.X, -size.Y, 0))),
+					Camera:WorldToViewportPoint(root.CFrame:PointToWorldSpace(Vector3.new(-size.X, -size.Y, 0)))
+				}
+
+				lines[1].From = Vector2.new(corners[1].X, corners[1].Y)
+				lines[1].To = Vector2.new(corners[2].X, corners[2].Y)
+
+				lines[2].From = lines[1].To
+				lines[2].To = Vector2.new(corners[3].X, corners[3].Y)
+
+				lines[3].From = lines[2].To
+				lines[3].To = Vector2.new(corners[4].X, corners[4].Y)
+
+				lines[4].From = lines[3].To
+				lines[4].To = lines[1].From
+
+				for i = 1, 4 do lines[i].Visible = true end
+			end)
+
+			espConnections[player] = con
+		end
+
+		for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
+		Players.PlayerAdded:Connect(CreateESP)
+	end
+})
+
+-- === TOGGLE: TRACERS ===
+ESP:AddToggle({
+	Name = "Tracer",
+	Default = false,
+	Callback = function(enabled)
+		TracerEnabled = enabled
+
+		if tracerConnection then tracerConnection:Disconnect() end
+		for _, l in pairs(tracerLines) do l:Destroy() end
+		tracerLines = {}
+		if tracerGui then tracerGui:Destroy() end
+
+		if not enabled then return end
+
+		local function CreateTracerLine()
+			local f = Instance.new("Frame")
+			f.Name = "TracerLine"
+			f.AnchorPoint = Vector2.new(0.5, 0.5)
+			f.BackgroundColor3 = Color3.new(1, 1, 1)
+			f.BorderSizePixel = 0
+			f.Size = UDim2.new(0, 0, 0, 0)
+			return f
+		end
+
+		tracerGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+		tracerGui.Name = "TracerESP"
+
+		tracerConnection = RunService.RenderStepped:Connect(function()
+			local origin = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y * 0.9)
+			local index = 1
+
+			for _, player in pairs(Players:GetPlayers()) do
+				if player == LocalPlayer or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then continue end
+				local pos, visible = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+				if not visible then continue end
+
+				local endPos = Vector2.new(pos.X, pos.Y)
+				local line = tracerLines[index]
+				if not line then
+					line = CreateTracerLine()
+					line.Parent = tracerGui
+					tracerLines[index] = line
+				end
+
+				local dir = (endPos - origin)
+				local length = dir.Magnitude
+				line.Size = UDim2.new(0, length, 0, 2)
+				line.Position = UDim2.new(0, (origin.X + endPos.X) / 2, 0, (origin.Y + endPos.Y) / 2)
+				line.Rotation = math.deg(math.atan2(dir.Y, dir.X))
+				line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				line.Visible = true
+
+				index += 1
+			end
+
+			for i = index, #tracerLines do
+				if tracerLines[i] then
+					tracerLines[i]:Destroy()
+					tracerLines[i] = nil
+				end
+			end
+		end)
+	end
+})
+
+-- === BUTTON: RADAR ===
+ESP:AddButton({
+	Name = "Radar",
+	Callback = function()
+		if RadarEnabled then
+			RadarEnabled = false
+			for _, obj in pairs(radarDrawings) do if obj.Remove then obj:Remove() end end
+			if radarConnection then radarConnection:Disconnect() end
+			if radarGuiConnection then radarGuiConnection:Disconnect() end
+			radarDrawings = {}
+			return
+		end
+
+		RadarEnabled = true
+
+		-- Load lerp color lib
+		local lerp = loadstring(game:HttpGet("https://pastebin.com/raw/wRnsJeid"))()
+		local HealthColor = lerp:Lerp(Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 255, 0))
+
+		local center = Vector2.new(200, 200)
+		local radius = 100
+
+		local radarBack = Drawing.new("Circle")
+		radarBack.Color = Color3.fromRGB(10, 10, 10)
+		radarBack.Filled = true
+		radarBack.Transparency = 0.9
+		radarBack.Position = center
+		radarBack.Radius = radius
+		radarBack.Visible = true
+		table.insert(radarDrawings, radarBack)
+
+		local radarBorder = Drawing.new("Circle")
+		radarBorder.Color = Color3.fromRGB(75, 75, 75)
+		radarBorder.Filled = false
+		radarBorder.Transparency = 0.75
+		radarBorder.Position = center
+		radarBorder.Radius = radius
+		radarBorder.Thickness = 3
+		radarBorder.Visible = true
+		table.insert(radarDrawings, radarBorder)
+
+		local localDot = Drawing.new("Triangle")
+		localDot.Visible = true
+		localDot.Thickness = 1
+		localDot.Filled = true
+		localDot.Color = Color3.fromRGB(255, 255, 255)
+		local function updateLocalDot()
+			localDot.PointA = center + Vector2.new(0, -6)
+			localDot.PointB = center + Vector2.new(-3, 6)
+			localDot.PointC = center + Vector2.new(3, 6)
+		end
+		updateLocalDot()
+		table.insert(radarDrawings, localDot)
+
+		radarConnection = RunService.RenderStepped:Connect(function()
+			updateLocalDot()
+			for _, obj in pairs(radarDrawings) do
+				if obj.Position then obj.Position = center end
+			end
+		end)
+
+		-- Drag
+		local UIS = game:GetService("UserInputService")
+		local dragging = false
+		local offset = Vector2.new()
+
+		radarGuiConnection = UIS.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				local mouse = UIS:GetMouseLocation()
+				if (mouse - center).Magnitude <= radius then
+					dragging = true
+					offset = mouse - center
+				end
+			end
+		end)
+
+		UIS.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+		end)
+
+		RunService.RenderStepped:Connect(function()
+			if dragging then
+				local mouse = UIS:GetMouseLocation()
+				center = mouse - offset
+			end
+		end)
+	end
+})
